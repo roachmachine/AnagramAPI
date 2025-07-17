@@ -22,12 +22,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="AnagramAPI.csproj.vspscc" />
+    <Compile Remove="Words\**" />
+    <Compile Remove="wwwroot\**" />
+    <Content Remove="Words\**" />
+    <Content Remove="wwwroot\**" />
+    <EmbeddedResource Remove="Words\**" />
+    <EmbeddedResource Remove="wwwroot\**" />
+    <None Remove="Words\**" />
+    <None Remove="wwwroot\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Words\" />
-    <Folder Include="wwwroot\" />
+    <None Remove="AnagramAPI.csproj.vspscc" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Azure.Identity" Version="1.12.1" />

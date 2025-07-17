@@ -10,63 +10,54 @@ using System.Text.RegularExpressions;
 
 namespace AnagramAPI.Controllers
 {
-
     /// <summary>
-    /// Controller class
+    /// API Controller for handling anagram-related operations.
     /// </summary>
     /// <author>Michael</author>
     /// <datetime>5/25/2017 7:00 PM</datetime>
-    /// <remarks>Controller class</remarks>
+    /// <remarks>Provides endpoints for generating anagrams based on user input.</remarks>
     /// <seealso cref="Controller" />
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="AnagramController"/> class.
+    /// </remarks>
+    /// <param name="memoryCache">The memory cache for caching dictionary data.</param>
+    /// <param name="db">The database context for accessing dictionary data.</param>
     [Route("api/[controller]")]
-    public partial class AnagramController : Controller
+    public partial class AnagramController(IMemoryCache memoryCache, DictionaryDBContext db) : Controller
     {
-        const string DefaultInput = "michaelroach";
-        const string BasicDictionaryCacheKey = "BasicEnglishDictionary";
-        const int DefaultMinWordLength = 2;
-        const int DefaultMaxNumWords = 4;
+        // Default values and constants
+        private const string DefaultInput = "roachmachine";
+        private const string BasicDictionaryCacheKey = "BasicEnglishDictionary";
+        private const int DefaultMinWordLength = 2;
+        private const int DefaultMaxNumWords = 3;
+        private const int MaxInputLetters = 20;
 
-        //TESTURLs
-        //http://localhost:56738/api/anagram?input=windmill
-        //http://localhost:56738/api/anagram/?input=michaelroach&minwordlength=2&maxnumwords=2
-
-        private readonly IMemoryCache _memoryCache;
-        private readonly DictionaryDBContext _db;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AnagramController" /> class.
-        /// </summary>
-        /// <param name="memoryCache">The memory cache.</param>
-        /// <param name="db">The database.</param>
-        public AnagramController(IMemoryCache memoryCache, DictionaryDBContext db)
-        {
-            _memoryCache = memoryCache;
-            _db = db;
-        }
+        // Dependencies
+        private readonly IMemoryCache _memoryCache = memoryCache;
+        private readonly DictionaryDBContext _db = db;
 
         /// <summary>
-        /// Gets the specified input.
+        /// Endpoint to generate anagrams based on the input string and constraints.
         /// </summary>
-        /// <param name="input">The input.</param>
-        /// <param name="minwordlength">The minwordlength.</param>
-        /// <param name="maxnumwords">The maxnumwords.</param>
-        /// <param name="psuedonymn">The psuedonymn.</param>
-        /// <returns></returns>
-        /// <exception cref="Exception">Input greater than 15 characters</exception>
+        /// <param name="input">The input string to generate anagrams for.</param>
+        /// <param name="minwordlength">The minimum length of words in the anagrams. Defaults to 2.</param>
+        /// <param name="maxnumwords">The maximum number of words in the anagrams. Defaults to 3.</param>
+        /// <param name="psuedonymn">Reserved for future use (e.g., pseudonym search).</param>
+        /// <returns>A list of anagrams or an error message if the operation fails.</returns>
+        /// <exception cref="Exception">Thrown if the input exceeds the maximum allowed length.</exception>
         [HttpGet]
-        public IEnumerable<string> Get([FromQuery] string input, int minwordlength = 2, int maxnumwords = 3, int psuedonymn = 0)
+        public IEnumerable<string> Get([FromQuery] string input, int minwordlength = 2, int maxnumwords = 3)
         {
-            // Set up some properties for metics
-            var properties = new Dictionary<string, string>
-                {{"Word", input}};
-
+            // Metrics for tracking input properties and performance
+            var properties = new Dictionary<string, string> { { "Word", input } };
             var measurements = new Dictionary<string, double>
             {
                 { "MinWordCount", minwordlength },
                 { "MaxWordLength", maxnumwords }
             };
 
-            List<string> firstnamestocheck = new(); //will store first names is psuedonym search
+            // Placeholder for pseudonym-related functionality
+            List<string> firstnamestocheck = [];
 
             try
             {
@@ -74,23 +65,26 @@ namespace AnagramAPI.Controllers
                 sw.Start();
 
                 #region Validate Input
-                if (input == null || input == string.Empty)
+                // Handle null or empty input by using a default value
+                if (string.IsNullOrEmpty(input))
                 {
                     input = DefaultInput;
                 }
                 else
                 {
+                    // Normalize input to lowercase and remove non-alphabetic characters
                     input = input.ToLower();
                     Regex rgx = MyRegex();
                     input = rgx.Replace(input, "");
 
-                    if (input.Length > 15)
+                    // Ensure input length does not exceed the maximum allowed
+                    if (input.Length > MaxInputLetters)
                     {
                         throw new Exception("Input greater than 15 characters");
                     }
                 }
 
-                //validate minimum word length less than zero and greater than the length of the input
+                // Validate and adjust minimum word length
                 if (minwordlength <= 0)
                 {
                     minwordlength = DefaultMinWordLength;
@@ -100,152 +94,49 @@ namespace AnagramAPI.Controllers
                     minwordlength = input.Length;
                 }
 
-                //maximum number of words must be at least 1 and 4 or less
+                // Validate and adjust maximum number of words
                 if (maxnumwords <= 0 || maxnumwords > 4)
                 {
                     maxnumwords = DefaultMaxNumWords;
                 }
-
                 #endregion
 
-                Dictionary<string, string> dictionaryItems = new();
+                // Dictionary to store cached or fetched dictionary data
+                Dictionary<string, string> dictionaryItems = [];
 
-                if (psuedonymn == 0)
+                // Attempt to retrieve dictionary data from cache
+                if (!_memoryCache.TryGetValue(BasicDictionaryCacheKey, out dictionaryItems))
                 {
-                    //get the dictionary   
-                    if (!_memoryCache.TryGetValue(BasicDictionaryCacheKey, out dictionaryItems))
-                    {
-                        //var db = new DictionaryDBContext();
-                        dictionaryItems = _db.Dictionary.FromSqlRaw("exec get_basic_english_dictionary").ToDictionary(kvp => kvp.Word, kvp => kvp.Word_ordered_array);
+                    // Fetch dictionary data from the database if not cached
+                    dictionaryItems = _db.Dictionary
+                        .FromSqlRaw("exec get_basic_english_dictionary")
+                        .ToDictionary(kvp => kvp.Word, kvp => kvp.Word_ordered_array);
 
-                        //go back to file based
-
-
-                        _memoryCache.Set(BasicDictionaryCacheKey, dictionaryItems);
-                    }
-                }
-                else if (psuedonymn ==1 )
-                {
-
-                    // Read the contents of the CSV files containing male first names, last names, and initials
-                    string[] male_first_names = System.IO.File.ReadAllLines(@"C:\SoftbotLabs\SoftbotLabsAnagramAPI\SoftbotLabsAnagramAPI\census\topfemale2016.csv");
-                    string[] last_names = System.IO.File.ReadAllLines(@"C:\SoftbotLabs\SoftbotLabsAnagramAPI\SoftbotLabsAnagramAPI\census\lastnames.csv");
-                    string[] initials = System.IO.File.ReadAllLines(@"C:\SoftbotLabs\SoftbotLabsAnagramAPI\SoftbotLabsAnagramAPI\census\initials.csv");
-
-                    foreach (string s in male_first_names)
-                    {
-                        if (!dictionaryItems.ContainsKey(s.ToLower()))
-                        {
-                            dictionaryItems.Add(s.ToLower(), new string(s.ToLower().OrderBy(c => c).ToArray()).ToLower().Replace("'", "'"));
-                        }
-
-                        firstnamestocheck.Add(s.ToLower());
-                    }
-
-                    foreach (string s in initials)
-                    {
-                        if (!dictionaryItems.ContainsKey(s.ToLower()))
-                        {
-                            dictionaryItems.Add(s.ToLower(), new string(s.ToLower().OrderBy(c => c).ToArray()).ToLower().Replace("'", "'"));
-                        }
-
-                        firstnamestocheck.Add(s.ToLower());
-                    }
-
-                    foreach (string s in last_names)
-                    {
-
-                        string[] lastNameColumns = s.Split(',');
-                        if (!dictionaryItems.ContainsKey(lastNameColumns[0].ToLower()))
-                        {
-                            dictionaryItems.Add(lastNameColumns[0].ToLower(), new string(lastNameColumns[0].ToLower().OrderBy(c => c).ToArray()).ToLower().Replace("'", "'"));
-                        }
-                    }
+                    // Cache the fetched dictionary data
+                    _memoryCache.Set(BasicDictionaryCacheKey, dictionaryItems);
                 }
 
-                //Get the anagrams and return them as JSON
-                AnagramBL anagramBL = new();
-                List<string> Output = AnagramBL.GetAnagrams(input.Trim(), minwordlength, maxnumwords, dictionaryItems);
+                // Generate anagrams using the business logic layer
+                List<string> output = AnagramBL.GetAnagrams(input.Trim(), minwordlength, maxnumwords, dictionaryItems);
 
-                //do some clean up if psuedonyms, move intial to middle, foramt o', etc.
-                if (psuedonymn == 1)
-                {
-                    List<string> psuedonymn_out = new();
-                    foreach (var name in Output)
-                    {
-                        string[] split_name = name.Split(' ');
-                        if (split_name.Length == 2)
-                        {
-                            if (firstnamestocheck.Contains(split_name[0].ToLower()))
-                            {
-                                psuedonymn_out.Add(name);
-                            }
-                        }
-                        else if (split_name.Length == 3)
-                        {
-                            if (split_name[0].Trim().Length == 1 && split_name[1].Length > 1)
-                            {
-                                if (firstnamestocheck.Contains(split_name[1].ToLower()))
-                                {
-                                    string newname = string.Empty;
-                                    if (split_name[0] == "o")
-                                    {
-                                        newname = split_name[1] + " " + split_name[0] + "'" + split_name[2];
-                                    }
-                                    else
-                                    {
-                                        newname = split_name[1] + " " + split_name[0] + ". " + split_name[2];
-                                    }
-
-                                    if (!psuedonymn_out.Contains(newname))
-                                        psuedonymn_out.Add(newname);
-                                }
-                            }
-                            if (split_name[0].Length > 1 && split_name[1].Length == 1)
-                            {
-
-                                if (firstnamestocheck.Contains(split_name[0].ToLower()))
-                                {
-                                    string newname = string.Empty;
-                                    if (split_name[1] == "o")
-                                    {
-                                        newname = split_name[0] + " " + split_name[1] + "'" + split_name[2];
-                                    }
-                                    else
-                                    {
-                                        newname = split_name[0] + " " + split_name[1] + ". " + split_name[2];
-                                    }
-
-                                    if (!psuedonymn_out.Contains(newname))
-                                        psuedonymn_out.Add(newname);
-                                }
-                            }
-                        }
-                    }
-                    psuedonymn_out.Sort();
-                    Output = psuedonymn_out;
-                }
-
+                // Stop the stopwatch and record elapsed time
                 sw.Stop();
+                output.Add($"Elapsed Time : {sw.ElapsedMilliseconds} ms");
+                measurements.Add("ElapsedTime", sw.ElapsedMilliseconds);
 
-                // add the elapsed time metrics for the user's consumption
-                Output.Add($"Elapsed Time : {sw.ElapsedMilliseconds} ");
-                measurements.Add("ElapsedTime", maxnumwords);
-
-                return Output;
+                return output;
             }
             catch (Exception ex)
             {
-                //set up something for the call to show failed
-                List<string> Error = new()
-                {
-                    $"error: {ex.Message}"
-                };
-
-                return Error;
+                // Return an error message in case of failure
+                return [$"error: {ex.Message}"];
             }
         }
 
+        /// <summary>
+        /// Compiled regular expression to remove non-alphabetic characters from input.
+        /// </summary>
+        /// <returns>A regex object for matching non-alphabetic characters.</returns>
         [GeneratedRegex("[^a-z]")]
         private static partial Regex MyRegex();
     }
