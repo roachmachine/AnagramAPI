@@ -22,7 +22,6 @@ namespace Anagram.ClassLibrary
         public static Dictionary<string, List<string>> GetDictionary(Dictionary<string, string> BaseDictionaryItems, string InputText, int DefaultMinWordLength)
         {
             //holds the words associated with the word ordered array key
-            List<string> wordList;
 
             //holds the word ordered array key and the associated words in a list
             Dictionary<string, List<string>> Dictionary = [];
@@ -52,17 +51,13 @@ namespace Anagram.ClassLibrary
 
                     //if we don't have the key yet (ordered word array without apostophy) then add it
                     //also if new instantiate an empty word list for the value
-                    if (!Dictionary.ContainsKey(original_key))
+                    if (!Dictionary.TryGetValue(original_key.ToLower(), out List<string> wordList))
                     {
                         //create an empty word list and insert the key and the empty list
                         wordList = [];
                         Dictionary.Add(original_key.ToLower(), wordList);
                     }
-                    else
-                    {
-                        //key already exists so grab it's word list
-                        wordList = Dictionary[original_key];
-                    }
+                    //key already exists so wordList is already set by TryGetValue
 
                     //if the word's ordered array exists as a key, then we save the word in the list of values
                     // so the ordered word array is acr, will be stored as the key, and car and arc will be stored with that key in the word list as they have the same key.
